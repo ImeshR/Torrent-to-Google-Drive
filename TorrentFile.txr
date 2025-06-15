@@ -1,0 +1,57 @@
+# STEP 1: Install required libraries
+!pip install -q libtorrent gdown tqdm
+
+# STEP 2: Import libraries
+import libtorrent as lt
+import time
+import os
+from google.colab import drive, files
+from shutil import copyfile
+from tqdm.notebook import tqdm
+
+# STEP 3: Mount Google Drive
+drive.mount('/content/drive')
+
+# STEP 4: Upload .torrent file
+print("📁 Please upload a .torrent file")
+uploaded = files.upload()
+if not uploaded:
+    raise ValueError("❌ No torrent file uploaded!")
+torrent_file = list(uploaded.keys())[0]
+
+# STEP 5: Download torrent with percentage progress bar
+def download_torrent(torrent_path, save_path="/content/temp_downloads"):
+    os.makedirs(save_path, exist_ok=True)
+    ses = lt.session()
+    params = {'save_path': save_path}
+    info = lt.torrent_info(torrent_path)
+    handle = ses.add_torrent({'ti': info, 'save_path': save_path})
+    
+    print("📥 Downloading torrent...")
+    pbar = tqdm(total=100, unit="%", desc="Downloading", bar_format="{l_bar}{bar} | {n:.1f}%")
+    last_progress = 0
+    while not handle.is_seed():
+        s = handle.status()
+        progress = s.progress * 100
+        if progress - last_progress >= 1:
+            pbar.update(progress - last_progress)
+            last_progress = progress
+        time.sleep(2)
+    pbar.update(100 - last_progress)
+    pbar.close()
+    print("✅ Download complete.")
+    return os.path.join(save_path, handle.torrent_file().files().file_path(0))
+
+downloaded_file = download_torrent(torrent_file)
+
+# STEP 6: Copy to Google Drive
+drive_folder = "/content/drive/My Drive/Movies"
+os.makedirs(drive_folder, exist_ok=True)
+destination_path = os.path.join(drive_folder, os.path.basename(downloaded_file))
+copyfile(downloaded_file, destination_path)
+print(f"✅ File uploaded to Google Drive: {destination_path}")
+
+# STEP 7: Cleanup
+os.remove(downloaded_file)
+os.remove(torrent_file)
+print("🧹 Cleanup complete.")
